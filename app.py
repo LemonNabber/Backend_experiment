@@ -1,5 +1,5 @@
 import os
-import anthropic
+from openai import OpenAI
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -9,9 +9,11 @@ app = Flask(__name__)
 # e.g. https://yourname.github.io). Falls back to "*" for local testing.
 CORS(app, origins=[os.environ.get("ALLOWED_ORIGIN", "*")])
 
-# Reads ANTHROPIC_API_KEY from the environment automatically
-client = anthropic.Anthropic()
+# Reads OPENAI_API_KEY from the environment automatically
+client = OpenAI()
 
+# Change the model on Render (OPENAI_MODEL) without touching the code
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 MAX_CHARS = 1000
 
 SYSTEM_PROMPT = (
@@ -38,13 +40,15 @@ def eli5():
         return jsonify(error=f"Please select under {MAX_CHARS} characters."), 400
 
     try:
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = client.chat.completions.create(
+            model=MODEL,
             max_tokens=300,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": text}],
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text},
+            ],
         )
-        return jsonify(explanation=msg.content[0].text)
+        return jsonify(explanation=response.choices[0].message.content)
     except Exception as e:
         app.logger.error(e)
         return jsonify(error="The crayon broke. Try again!"), 500
