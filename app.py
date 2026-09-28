@@ -9,11 +9,15 @@ app = Flask(__name__)
 # e.g. https://yourname.github.io). Falls back to "*" for local testing.
 CORS(app, origins=[os.environ.get("ALLOWED_ORIGIN", "*")])
 
-# Reads OPENAI_API_KEY from the environment automatically
-client = OpenAI()
+# Groq has a free tier and speaks the same API as OpenAI, so we reuse the
+# OpenAI library and just point it at Groq. Key comes from GROQ_API_KEY.
+client = OpenAI(
+    api_key=os.environ.get("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
+)
 
-# Change the model on Render (OPENAI_MODEL) without touching the code
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+# Change the model on Render (LLM_MODEL) without touching the code
+MODEL = os.environ.get("LLM_MODEL", "openai/gpt-oss-120b")
 MAX_CHARS = 1000
 
 SYSTEM_PROMPT = (
@@ -42,13 +46,16 @@ def eli5():
     try:
         response = client.chat.completions.create(
             model=MODEL,
-            max_tokens=300,
+            max_tokens=1000,  # headroom in case the model "thinks" before answering
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": text},
             ],
         )
-        return jsonify(explanation=response.choices[0].message.content)
+        answer = (response.choices[0].message.content or "").strip()
+        if not answer:
+            return jsonify(error="The crayon ran out of ink. Try again!"), 500
+        return jsonify(explanation=answer)
     except Exception as e:
         app.logger.error(e)
         return jsonify(error="The crayon broke. Try again!"), 500
