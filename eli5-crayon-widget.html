@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELI5 Crayon Widget — Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #E8DCC3;
+    --paper-dark: #DCCBA3;
+    --ink: #2B2118;
+    --crayon-red: #E63946;
+    --crayon-blue: #457B9D;
+    --crayon-yellow: #F4A300;
+    --crayon-green: #588157;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Kalam', cursive;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.7;
+    padding: 3rem 1.5rem;
+  }
+
+  .page {
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    border-bottom: 3px solid var(--crayon-red);
+    display: inline-block;
+    padding-bottom: 4px;
+    transform: rotate(-0.5deg);
+  }
+
+  .hint {
+    font-size: 0.95rem;
+    color: #6b5f4d;
+    margin-bottom: 2rem;
+  }
+
+  p.content {
+    font-size: 1.15rem;
+  }
+
+  /* --- The floating sticker button that appears on text selection --- */
+  #eli5-trigger {
+    position: absolute;
+    display: none;
+    background: var(--crayon-yellow);
+    color: var(--ink);
+    border: 2.5px solid var(--ink);
+    border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
+    padding: 5px;
+    line-height: 0;
+    cursor: pointer;
+    z-index: 9999;
+    box-shadow: 2px 2px 0 var(--ink);
+    transform: rotate(-3deg);
+    transition: transform 0.1s ease;
+  }
+  #eli5-trigger:hover {
+    transform: rotate(0deg) scale(1.05);
+  }
+
+  /* --- The speech-bubble popup --- */
+  #eli5-bubble {
+    font-family: 'Kalam', cursive;
+    color: var(--ink);
+    line-height: 1.5;
+    position: absolute;
+    display: none;
+    max-width: 300px;
+    background: #fdf8ec;
+    border: 3px solid var(--ink);
+    border-radius: 22px 18px 24px 16px / 20px 24px 16px 22px;
+    padding: 16px 18px;
+    font-size: 1rem;
+    z-index: 10000;
+    box-shadow: 4px 4px 0 var(--crayon-blue);
+    transform: rotate(-0.7deg);
+  }
+
+  /* hand-drawn bubble tail: --tail-x is set by JS so it points at the highlight */
+  #eli5-bubble::after,
+  #eli5-bubble::before {
+    content: "";
+    position: absolute;
+    width: 0;
+    height: 0;
+    border: solid transparent;
+  }
+  /* bubble sits BELOW the highlight -> tail on top, pointing up */
+  #eli5-bubble.below::after {
+    top: -14px;
+    left: calc(var(--tail-x, 28px) - 10px);
+    border-width: 0 10px 12px 10px;
+    border-bottom-color: var(--ink);
+  }
+  #eli5-bubble.below::before {
+    top: -9px;
+    left: calc(var(--tail-x, 28px) - 8px);
+    border-width: 0 8px 10px 8px;
+    border-bottom-color: #fdf8ec;
+    z-index: 1;
+  }
+  /* bubble sits ABOVE the highlight -> tail on bottom, pointing down */
+  #eli5-bubble.above::after {
+    bottom: -14px;
+    left: calc(var(--tail-x, 28px) - 10px);
+    border-width: 12px 10px 0 10px;
+    border-top-color: var(--ink);
+  }
+  #eli5-bubble.above::before {
+    bottom: -9px;
+    left: calc(var(--tail-x, 28px) - 8px);
+    border-width: 10px 8px 0 8px;
+    border-top-color: #fdf8ec;
+    z-index: 1;
+  }
+
+  #eli5-bubble .label {
+    font-weight: 700;
+    color: var(--crayon-red);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  #eli5-bubble .close {
+    position: absolute;
+    top: 4px;
+    right: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 1rem;
+  }
+
+  #eli5-bubble .loading {
+    color: #6b5f4d;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1>🖍️ Try it: select some text below</h1>
+  <p class="hint">Highlight any sentence in the paragraph — a little crayon button will pop up so you can get it explained like you're five.</p>
+
+  <p class="content">
+    A neural network is trained using a process called backpropagation, which calculates the gradient of a loss function with respect to each weight by applying the chain rule iteratively, propagating error signals backward from the output layer to the input layer. Meanwhile, a REST API exposes resources as URIs and uses standard HTTP methods to let clients perform stateless operations against a server.
+  </p>
+</div>
+
+<!-- Floating trigger button -->
+<button id="eli5-trigger" aria-label="Explain this like I'm five" title="Explain like I'm 5">
+  <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+    <g transform="rotate(40 16 16)" stroke="#2B2118" stroke-width="2" stroke-linejoin="round">
+      <rect x="11" y="3" width="10" height="19" fill="#E63946"/>
+      <rect x="11" y="8" width="10" height="7" fill="#fdf8ec"/>
+      <polygon points="11,22 21,22 16,30" fill="#E63946"/>
+    </g>
+  </svg>
+</button>
+
+<!-- Explanation bubble -->
+<div id="eli5-bubble">
+  <span class="close" id="eli5-close">&times;</span>
+  <span class="label">explained like you're five:</span>
+  <div id="eli5-text"></div>
+</div>
+
+<script>
+  const trigger = document.getElementById('eli5-trigger');
+  const bubble = document.getElementById('eli5-bubble');
+  const bubbleText = document.getElementById('eli5-text');
+  const closeBtn = document.getElementById('eli5-close');
+
+  let selectedText = '';
+  let selRect = null; // highlight position in page coordinates
+
+  const GAP = 20;     // space between highlight and bubble (room for the tail)
+  const MARGIN = 12;  // keep the bubble this far from the screen edges
+
+  // Show the sticker button near the selection
+  document.addEventListener('mouseup', (e) => {
+    if (bubble.contains(e.target)) return; // ignore clicks/selections inside the bubble
+
+    const selection = window.getSelection();
+    const text = selection.toString().trim();
+
+    if (text.length > 0) {
+      selectedText = text;
+      const r = selection.getRangeAt(0).getBoundingClientRect();
+      selRect = {
+        top: r.top + window.scrollY,
+        bottom: r.bottom + window.scrollY,
+        left: r.left + window.scrollX,
+        right: r.right + window.scrollX
+      };
+
+      trigger.style.top = `${selRect.top - 44}px`;
+      trigger.style.left = `${selRect.left}px`;
+      trigger.style.display = 'block';
+      bubble.style.display = 'none';
+    } else if (e.target !== trigger) {
+      trigger.style.display = 'none';
+    }
+  });
+
+  // Place the bubble above or below the highlight (never on top of it)
+  // and aim the tail at the highlight's horizontal center.
+  function positionBubble() {
+    if (!selRect) return;
+
+    const bw = bubble.offsetWidth;
+    const bh = bubble.offsetHeight;
+    const viewTop = window.scrollY;
+    const viewBottom = window.scrollY + window.innerHeight;
+
+    const spaceBelow = viewBottom - selRect.bottom;
+    const spaceAbove = selRect.top - viewTop;
+    const placeBelow = spaceBelow >= bh + GAP || spaceBelow >= spaceAbove;
+
+    const top = placeBelow ? selRect.bottom + GAP : selRect.top - GAP - bh;
+
+    const targetX = (selRect.left + selRect.right) / 2;
+    const minLeft = window.scrollX + MARGIN;
+    const maxLeft = window.scrollX + document.documentElement.clientWidth - bw - MARGIN;
+    const left = Math.max(minLeft, Math.min(targetX - bw / 2, maxLeft));
+
+    // tail points at the highlight, kept inside the bubble's rounded corners
+    const tailX = Math.max(26, Math.min(targetX - left, bw - 26));
+
+    bubble.classList.toggle('below', placeBelow);
+    bubble.classList.toggle('above', !placeBelow);
+    bubble.style.setProperty('--tail-x', `${tailX}px`);
+    bubble.style.top = `${top}px`;
+    bubble.style.left = `${left}px`;
+  }
+
+  // Open the bubble and fetch the explanation
+  trigger.addEventListener('click', async () => {
+    bubble.style.display = 'block';
+    trigger.style.display = 'none';
+    bubbleText.innerHTML = '<span class="loading">thinking in crayon...</span>';
+    positionBubble();
+
+    try {
+      const explanation = await getEli5Explanation(selectedText);
+      bubbleText.textContent = explanation;
+    } catch (err) {
+      bubbleText.textContent = "oops, couldn't reach the backend. try again?";
+    }
+    positionBubble(); // content height changed, so re-place it
+  });
+
+  window.addEventListener('resize', () => {
+    if (bubble.style.display === 'block') positionBubble();
+  });
+
+  closeBtn.addEventListener('click', () => {
+    bubble.style.display = 'none';
+  });
+
+  // ---------------------------------------------------------------
+  // BACKEND CALL
+  // After deploying to Render, paste your service URL here (keep /eli5).
+  // While it still says YOUR-APP, the widget shows a fake demo answer.
+  // ---------------------------------------------------------------
+  const BACKEND_URL = 'https://YOUR-APP.onrender.com/eli5';
+
+  async function getEli5Explanation(text) {
+    if (BACKEND_URL.includes('YOUR-APP')) {
+      await new Promise(r => setTimeout(r, 900));
+      return 'Demo mode! Once you set BACKEND_URL to your Render service, a real explanation will show up here.';
+    }
+    const res = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data.explanation;
+  }
+</script>
+
+</body>
+</html>
